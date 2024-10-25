@@ -1,0 +1,680 @@
+<html><head><base href="." /><meta content="text/html; charset=UTF-8" http-equiv="content-type">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Routenplaner mit OpenStreetMap</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+<style>
+    body { 
+        margin: 0; 
+        padding: 10px;
+        font-family: Arial, sans-serif;
+        box-sizing: border-box;
+    }
+    #map { 
+        height: 600px; 
+        width: 100%;
+        margin-top: 20px;
+    }
+    .input-container {
+        margin-bottom: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .special-points {
+        margin-bottom: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .special-point {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background-color: #f5f5dc; /* beige */
+        padding: 10px;
+        border-radius: 4px;
+    }
+    .address-list {
+        max-height: 200px;
+        overflow-y: auto;
+        margin-bottom: 20px;
+    }
+    .address-item {
+        padding: 5px;
+        margin: 5px 0;
+        background-color: #e6e6e6; /* light gray */
+        border-radius: 4px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+    .delete-btn {
+        background-color: #444444; /* dark gray */
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 5px 10px;
+        cursor: pointer;
+    }
+    .delete-btn:hover {
+        background-color: #222222; /* darker gray */
+    }
+    .controls {
+        margin-bottom: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    button {
+        padding: 10px 20px;
+        background-color: #4a4a4a; /* medium gray */
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    button:disabled {
+        background-color: #cccccc; /* lighter gray */
+        cursor: not-allowed;
+    }
+    #nextStop {
+        display: none;
+    }
+    input[type="text"] {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        width: 300px;
+    }
+    input[readonly] {
+        background-color: #f5f5dc;
+        cursor: not-allowed;
+    }
+    /* Info Button */
+    .info-button {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: #4a4a4a;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 40px;  /* Increased from 30px */
+        height: 40px; /* Increased from 30px */
+        cursor: pointer;
+        font-weight: bold;
+        font-style: italic;
+        font-family: serif;
+        font-size: 20px; /* Added font size */
+        box-shadow: 0 2px 5px rgba(0,0,0,0.3); /* Added shadow for better visibility */
+        z-index: 998; /* Added z-index to ensure visibility */
+    }
+    .info-button:hover {
+        background-color: #222222; /* Added hover effect */
+        transform: scale(1.1); /* Added slight scale effect on hover */
+    }
+    /* Modal Styles */
+    .modal {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: #f5f5dc;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        z-index: 1000;
+        max-width: 80%;
+    }
+    .modal-content {
+        margin-bottom: 20px;
+    }
+    .modal-close {
+        text-align: right;
+    }
+    .overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0,0,0,0.5);
+        z-index: 999;
+    }
+    /* Responsive Design für Smartphones */
+    @media (max-width: 768px) {
+        body {
+            padding: 5px;
+        }
+        
+        #map {
+            height: 400px;
+        }
+        
+        .input-container, .special-points {
+            flex-direction: column;
+            width: 100%;
+        }
+        
+        .special-point {
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        input[type="text"] {
+            width: 100% !important;
+            box-sizing: border-box;
+            padding: 10px !important;
+            font-size: 16px;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px 20px;
+            font-size: 16px;
+            margin: 5px 0;
+        }
+        
+        .address-item {
+            padding: 10px;
+        }
+        
+        .address-item span {
+            width: calc(100% - 80px);
+            word-break: break-word;
+        }
+        
+        .delete-btn {
+            padding: 8px 15px;
+            font-size: 14px;
+        }
+        
+        .controls {
+            flex-direction: column;
+            width: 100%;
+        }
+        
+        .controls button {
+            margin: 5px 0;
+        }
+        
+        .leaflet-control-zoom {
+            display: none;
+        }
+        
+        .info-button {
+            bottom: 15px; /* Adjusted for larger button on mobile */
+            right: 15px;  /* Adjusted for larger button on mobile */
+            width: 50px;  /* Even larger on mobile */
+            height: 50px; /* Even larger on mobile */
+            font-size: 24px; /* Larger font on mobile */
+        }
+        
+        .modal {
+            width: 90%;
+            max-width: none;
+        }
+    }
+</style>
+</head>
+<body>
+    <div class="special-points">
+        <div class="special-point">
+            <label for="startPoint">Startpunkt:</label>
+            <input type="text" id="startPoint" placeholder="Startadresse eingeben">
+            <button onclick="setStartPoint()">Start setzen</button>
+        </div>
+        <div class="special-point">
+            <label for="endPoint">Endpunkt:</label>
+            <input type="text" id="endPoint" placeholder="Endadresse eingeben" value="Murtenstrasse 85, 3008 Bern" readonly>
+            <button onclick="setEndPoint()">Ende setzen</button>
+        </div>
+    </div>
+
+    <div class="input-container">
+        <input type="text" id="addressInput" placeholder="Weitere Adressen eingeben">
+        <button onclick="addAddress()">Adresse hinzufügen</button>
+    </div>
+
+    <div id="addressList" class="address-list"></div>
+
+    <div class="controls">
+        <button onclick="optimizeRoute()">Route optimieren</button>
+        <button onclick="reverseRoute()" id="reverseBtn" disabled>Route umkehren</button>
+        <button onclick="startNavigation()" id="startNav" disabled>Navigation starten</button>
+        <button onclick="nextStop()" id="nextStop">Nächster Stopp</button>
+    </div>
+
+    <button class="info-button" onclick="showInfo()">i</button>
+    <div class="overlay" id="overlay" onclick="hideInfo()"></div>
+    <div class="modal" id="infoModal">
+        <div class="modal-content">
+            <h3>Farbkodierung:</h3>
+            <p>• Grauer Marker (S): Startpunkt</p>
+            <p>• Schwarzer Marker (E): Endpunkt</p>
+            <p>• Blaue Marker & Linien: Bereits besuchte Stopps und Strecken</p>
+            <p>• Schwarze Marker: Noch nicht besuchte Stopps</p>
+            <p>• Rote Linien: Noch nicht gefahrene Strecken</p>
+        </div>
+        <div class="modal-close">
+            <button onclick="hideInfo()" style="width: auto;">Schließen</button>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+<script>
+let addresses = [];
+let optimizedRoute = [];
+let currentStopIndex = 0;
+let markers = [];
+let routeLayer;
+let map;
+let startPoint = null;
+let endPoint = null;
+let routeSegments = []; 
+
+function initMap() {
+    map = L.map('map').setView([51.1657, 10.4515], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+}
+
+async function setStartPoint() {
+    const address = document.getElementById('startPoint').value;
+    if (address.trim() === '') return;
+
+    try {
+        const coords = await geocodeAddress(address);
+        startPoint = {
+            address: address,
+            coords: coords
+        };
+        updateMap();
+        document.getElementById('startPoint').style.backgroundColor = '#f5f5dc';
+    } catch (error) {
+        alert('Startadresse konnte nicht gefunden werden');
+    }
+}
+
+async function setEndPoint() {
+    const fixedAddress = "Murtenstrasse 85, 3008 Bern";
+    try {
+        const coords = await geocodeAddress(fixedAddress);
+        endPoint = {
+            address: fixedAddress,
+            coords: coords
+        };
+        updateMap();
+        document.getElementById('endPoint').value = fixedAddress;
+        document.getElementById('endPoint').style.backgroundColor = '#f5f5dc';
+    } catch (error) {
+        alert('Endadresse konnte nicht gefunden werden');
+    }
+}
+
+async function addAddress() {
+    const address = document.getElementById('addressInput').value;
+    if (address.trim() === '') return;
+
+    try {
+        const coords = await geocodeAddress(address);
+        addresses.push({
+            address: address,
+            coords: coords
+        });
+        updateAddressList();
+        updateMap();
+        document.getElementById('addressInput').value = '';
+    } catch (error) {
+        alert('Adresse konnte nicht gefunden werden');
+    }
+}
+
+function deleteAddress(index) {
+    addresses.splice(index, 1);
+    updateAddressList();
+    updateMap();
+    document.getElementById('startNav').disabled = true;
+}
+
+function updateMarkerColors() {
+    markers.forEach((marker, index) => {
+        let color;
+        if (index <= currentStopIndex) {
+            color = '#0000FF'; // blue for visited stops
+        } else {
+            color = '#222222'; // black for upcoming stops
+        }
+        
+        const markerElement = marker.getElement();
+        if (markerElement) {
+            const divIcon = markerElement.querySelector('div');
+            if (divIcon) {
+                divIcon.style.backgroundColor = color;
+            }
+        }
+    });
+
+    routeSegments.forEach((segment, index) => {
+        if (index < currentStopIndex) {
+            segment.setStyle({color: '#0000FF'}); // Blue for completed segments
+        } else {
+            segment.setStyle({color: '#ff0000'}); // Red for upcoming segments
+        }
+    });
+}
+
+function updateMap() {
+    clearMap();
+    
+    // Startpunkt mit grauem Marker
+    if (startPoint) {
+        const startMarker = L.marker(startPoint.coords, {
+            icon: L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div style="background-color: #4a4a4a; color: white; padding: 5px; border-radius: 50%; width: 20px; height: 20px; text-align: center; line-height: 20px;">S</div>`,
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            })
+        });
+        markers.push(startMarker);
+        startMarker.bindPopup(`Start<br>${startPoint.address}`);
+        startMarker.addTo(map);
+    }
+
+    // Zwischenstopps
+    addresses.forEach((addr, i) => {
+        addMarker(addr.coords, i + 1, addr.address);
+    });
+
+    // Endpunkt mit dunklem Marker
+    if (endPoint) {
+        const endMarker = L.marker(endPoint.coords, {
+            icon: L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div style="background-color: #222222; color: white; padding: 5px; border-radius: 50%; width: 20px; height: 20px; text-align: center; line-height: 20px;">E</div>`,
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            })
+        });
+        markers.push(endMarker);
+        endMarker.bindPopup(`Ende<br>${endPoint.address}`);
+        endMarker.addTo(map);
+    }
+
+    // Karte auf alle Punkte zoomen
+    const allPoints = [
+        ...(startPoint ? [startPoint] : []),
+        ...addresses,
+        ...(endPoint ? [endPoint] : [])
+    ];
+    
+    if (allPoints.length > 0) {
+        const bounds = L.latLngBounds(allPoints.map(point => point.coords));
+        map.fitBounds(bounds, { padding: [50, 50] });
+    }
+}
+
+async function geocodeAddress(address) {
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`);
+    const data = await response.json();
+    if (data.length === 0) throw new Error('Address not found');
+    return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+}
+
+function updateAddressList() {
+    const list = document.getElementById('addressList');
+    list.innerHTML = '';
+    addresses.forEach((addr, i) => {
+        const div = document.createElement('div');
+        div.className = 'address-item';
+        
+        const addressText = document.createElement('span');
+        addressText.textContent = `${i + 1}. ${addr.address}`;
+        
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'delete-btn';
+        deleteButton.textContent = 'Löschen';
+        deleteButton.onclick = () => deleteAddress(i);
+        
+        div.appendChild(addressText);
+        div.appendChild(deleteButton);
+        list.appendChild(div);
+    });
+}
+
+function addMarker(coords, number, address) {
+    const marker = L.marker(coords, {
+        icon: L.divIcon({
+            className: 'custom-div-icon',
+            html: `<div style="background-color: #666666; color: white; padding: 5px; border-radius: 50%; width: 20px; height: 20px; text-align: center; line-height: 20px;">${number}</div>`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        })
+    });
+    marker.bindPopup(`Stopp ${number}<br>${address}`);
+    markers.push(marker);
+    marker.addTo(map);
+}
+
+async function optimizeRoute() {
+    if (!startPoint || !endPoint) {
+        alert('Bitte Start- und Endpunkt festlegen!');
+        return;
+    }
+
+    let allPoints = [startPoint, ...addresses, endPoint];
+    if (allPoints.length < 2) return;
+
+    optimizedRoute = [startPoint];
+    let remainingPoints = [...addresses];
+
+    while (remainingPoints.length > 0) {
+        const current = optimizedRoute[optimizedRoute.length - 1];
+        let nearest = 0;
+        let minDist = Infinity;
+
+        remainingPoints.forEach((point, i) => {
+            const dist = distance(current.coords, point.coords);
+            if (dist < minDist) {
+                minDist = dist;
+                nearest = i;
+            }
+        });
+
+        optimizedRoute.push(remainingPoints[nearest]);
+        remainingPoints.splice(nearest, 1);
+    }
+
+    optimizedRoute.push(endPoint);
+
+    clearMap();
+    await drawOptimizedRoute();
+    updateAddressListOrder(); 
+    document.getElementById('startNav').disabled = false;
+    document.getElementById('reverseBtn').disabled = false; // Enable reverse button
+}
+
+function reverseRoute() {
+    if (!optimizedRoute || optimizedRoute.length < 2) return;
+    
+    // Keep start and end points in their original positions
+    const start = optimizedRoute[0];
+    const end = optimizedRoute[optimizedRoute.length - 1];
+    
+    // Reverse only the middle points
+    const middlePoints = optimizedRoute.slice(1, -1).reverse();
+    
+    // Reconstruct the route
+    optimizedRoute = [start, ...middlePoints, end];
+    
+    // Redraw the route
+    clearMap();
+    drawOptimizedRoute();
+    updateAddressListOrder();
+}
+
+function distance(coord1, coord2) {
+    return Math.sqrt(
+        Math.pow(coord1[0] - coord2[0], 2) + 
+        Math.pow(coord1[1] - coord2[1], 2)
+    );
+}
+
+function clearMap() {
+    markers.forEach(marker => marker.remove());
+    markers = [];
+    if (routeLayer) map.removeLayer(routeLayer);
+}
+
+async function drawOptimizedRoute() {
+    optimizedRoute.forEach((point, i) => {
+        if (i === 0) {
+            const startMarker = L.marker(point.coords, {
+                icon: L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style="background-color: #4a4a4a; color: white; padding: 5px; border-radius: 50%; width: 20px; height: 20px; text-align: center; line-height: 20px;">S</div>`,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            });
+            startMarker.bindPopup(`Start<br>${point.address}`);
+            markers.push(startMarker);
+            startMarker.addTo(map);
+        } else if (i === optimizedRoute.length - 1) {
+            const endMarker = L.marker(point.coords, {
+                icon: L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style="background-color: #222222; color: white; padding: 5px; border-radius: 50%; width: 20px; height: 20px; text-align: center; line-height: 20px;">E</div>`,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            });
+            endMarker.bindPopup(`Ende<br>${point.address}`);
+            markers.push(endMarker);
+            endMarker.addTo(map);
+        } else {
+            addMarker(point.coords, i, point.address);
+        }
+    });
+
+    routeSegments = []; 
+
+    // OSRM-Backend für die Routenberechnung verwenden
+    for (let i = 0; i < optimizedRoute.length - 1; i++) {
+        const start = optimizedRoute[i].coords;
+        const end = optimizedRoute[i + 1].coords;
+        
+        try {
+            const response = await fetch(
+                `https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`
+            );
+            const data = await response.json();
+
+            if (data.routes && data.routes[0]) {
+                const routeCoordinates = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                const routeSegment = L.polyline(routeCoordinates, {
+                    color: '#ff0000',
+                    weight: 3,
+                    opacity: 0.8
+                }).addTo(map);
+
+                routeSegments.push(routeSegment); 
+
+                if (!routeLayer) {
+                    routeLayer = L.layerGroup([routeSegment]).addTo(map);
+                } else {
+                    routeLayer.addLayer(routeSegment);
+                }
+            }
+        } catch (error) {
+            console.error('Fehler beim Abrufen der Route:', error);
+        }
+    }
+
+    const bounds = L.latLngBounds(optimizedRoute.map(point => point.coords));
+    map.fitBounds(bounds, { padding: [50, 50] });
+}
+
+function startNavigation() {
+    currentStopIndex = 1;
+    document.getElementById('startNav').style.display = 'none';
+    document.getElementById('nextStop').style.display = 'inline';
+    updateMarkerColors();
+    navigateToCurrentStop();
+}
+
+function nextStop() {
+    currentStopIndex++;
+    if (currentStopIndex >= optimizedRoute.length) {
+        alert('Route beendet!');
+        document.getElementById('nextStop').style.display = 'none';
+        document.getElementById('startNav').style.display = 'inline';
+        return;
+    }
+    navigateToCurrentStop();
+}
+
+function navigateToCurrentStop() {
+    const currentStop = optimizedRoute[currentStopIndex];
+    map.setView(currentStop.coords, 15);
+    markers[currentStopIndex].openPopup();
+    updateMarkerColors();
+    
+    const nextDestination = optimizedRoute[currentStopIndex];
+    const coords = nextDestination.coords;
+    const navigationUrl = `https://www.google.com/maps/dir/?api=1&destination=${coords[0]},${coords[1]}&travelmode=driving`;
+    window.open(navigationUrl, '_blank');
+}
+
+function showInfo() {
+    document.getElementById('overlay').style.display = 'block';
+    document.getElementById('infoModal').style.display = 'block';
+}
+
+function hideInfo() {
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('infoModal').style.display = 'none';
+}
+
+function updateAddressListOrder() {
+    const list = document.getElementById('addressList');
+    list.innerHTML = '';
+    
+    // Skip first (start) and last (end) points
+    for(let i = 1; i < optimizedRoute.length - 1; i++) {
+        const addr = optimizedRoute[i];
+        const div = document.createElement('div');
+        div.className = 'address-item';
+        
+        const addressText = document.createElement('span');
+        addressText.textContent = `${i}. ${addr.address}`;
+        
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'delete-btn';
+        deleteButton.textContent = 'Löschen';
+        deleteButton.onclick = () => deleteAddress(i-1);
+        
+        div.appendChild(addressText);
+        div.appendChild(deleteButton);
+        list.appendChild(div);
+    }
+}
+
+initMap();
+setEndPoint(); // Automatically set the fixed end point
+</script>
+
+</body>
+</html>
